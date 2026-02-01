@@ -1,156 +1,229 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const state = {
-        face: 'face-1',
-        eyes: 'eyes-1',
-        mouth: 'mouth-1',
-        hair: 'hair-1',
-        colors: {
-            skin: CharacterData.colors.skin[0],
-            hair: CharacterData.colors.hair[0],
-            eyes: CharacterData.colors.eyes[0],
-            clothes: CharacterData.colors.clothes[0]
-        }
-    };
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Character } from './character-3d.js';
 
-    const elements = {
-        headGroup: document.getElementById('head-group'),
-        eyesGroup: document.getElementById('eyes-group'),
-        mouthGroup: document.getElementById('mouth-group'),
-        hairGroup: document.getElementById('hair-group'),
-        optionsPanel: document.getElementById('options-panel'),
-        tabBtns: document.querySelectorAll('.tab-btn'),
-        randomBtn: document.getElementById('random-btn'),
-        exportBtn: document.getElementById('export-btn')
-    };
+// --- SCENE SETUP ---
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1e293b); // Fallback color
+// Custom Fog for depth
+scene.fog = new THREE.Fog(0x0f172a, 5, 20);
 
-    function renderCharacter() {
-        const faceData = CharacterData.parts.face.find(p => p.id === state.face);
-        const eyesData = CharacterData.parts.eyes.find(p => p.id === state.eyes);
-        const mouthData = CharacterData.parts.mouth.find(p => p.id === state.mouth);
-        const hairData = CharacterData.parts.hair.find(p => p.id === state.hair);
+// Camera
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(2, 2, 4);
 
-        elements.headGroup.innerHTML = faceData.path;
-        elements.headGroup.style.color = state.colors.skin;
+// Renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+container.appendChild(renderer.domElement);
 
-        elements.eyesGroup.innerHTML = eyesData.path;
-        elements.eyesGroup.style.color = state.colors.eyes;
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
 
-        elements.mouthGroup.innerHTML = mouthData.path;
-        elements.mouthGroup.style.color = '#333';
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(5, 10, 7);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 1024;
+dirLight.shadow.mapSize.height = 1024;
+scene.add(dirLight);
 
-        elements.hairGroup.innerHTML = hairData.path;
-        elements.hairGroup.style.color = state.colors.hair;
-    }
+const backLight = new THREE.DirectionalLight(0x38bdf8, 0.5); // Blue rim light
+backLight.position.set(-5, 2, -5);
+scene.add(backLight);
 
-    function createOptionItem(category, item) {
-        const div = document.createElement('div');
-        div.className = `style-item ${state[category] === item.id ? 'active' : ''}`;
-        div.innerHTML = `<span style="font-size: 0.7rem">${item.name}</span>`;
-        div.addEventListener('click', () => {
-            state[category] = item.id;
-            updateUI();
-            renderCharacter();
-        });
-        return div;
-    }
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 2;
+controls.maxDistance = 8;
+controls.target.set(0, 0, 0);
 
-    function createColorItem(category, color) {
-        const div = document.createElement('div');
-        div.className = `color-item ${state.colors[category] === color ? 'active' : ''}`;
-        div.style.backgroundColor = color;
-        div.addEventListener('click', () => {
-            state.colors[category] = color;
-            updateUI();
-            renderCharacter();
-        });
-        return div;
-    }
+// Ground
+const groundGeo = new THREE.CylinderGeometry(3, 3, 0.2, 8);
+const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    flatShading: true,
+    roughness: 0.8
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.position.y = -0.9;
+ground.receiveShadow = true;
+scene.add(ground);
 
-    function updateUI() {
-        // Update tabs and panel content based on active tab
-        const activeTab = document.querySelector('.tab-btn.active').dataset.category;
-        renderOptions(activeTab);
-    }
+// --- CHARACTER ---
+const character = new Character();
+scene.add(character.mesh);
 
-    function renderOptions(category) {
-        elements.optionsPanel.innerHTML = '';
+// --- ANIMATION LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
 
-        if (category === 'colors') {
-            ['skin', 'hair', 'eyes', 'clothes'].forEach(type => {
-                const group = document.createElement('div');
-                group.className = 'option-group';
-                group.innerHTML = `<h3>${type} color</h3>`;
-                const grid = document.createElement('div');
-                grid.className = 'color-grid';
-                CharacterData.colors[type].forEach(color => {
-                    grid.appendChild(createColorItem(type, color));
-                });
-                group.appendChild(grid);
-                elements.optionsPanel.appendChild(group);
-            });
-        } else {
-            const group = document.createElement('div');
-            group.className = 'option-group';
-            group.innerHTML = `<h3>Select ${category}</h3>`;
-            const grid = document.createElement('div');
-            grid.className = 'style-grid';
-            CharacterData.parts[category].forEach(item => {
-                grid.appendChild(createOptionItem(category, item));
-            });
-            group.appendChild(grid);
-            elements.optionsPanel.appendChild(group);
-        }
-    }
+    // Idle Animation: simple floating/breathing
+    const time = Date.now() * 0.001;
+    character.mesh.position.y = Math.sin(time) * 0.05 + 0.05;
+    character.mesh.rotation.y = Math.sin(time * 0.5) * 0.05;
 
-    elements.tabBtns.forEach(btn => {
+    controls.update();
+    renderer.render(scene, camera);
+}
+animate();
+
+// --- RESIZE ---
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- UI LOGIC ---
+const uiState = {
+    height: 1,
+    build: 1,
+    headSize: 1
+};
+
+const panel = document.getElementById('panel-content');
+
+function createSlider(id, label, min, max, step, value, onChange) {
+    const div = document.createElement('div');
+    div.className = 'slider-container';
+    div.innerHTML = `<label><span>${label}</span> <span id="${id}-val">${value}</span></label>`;
+
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = value;
+
+    input.addEventListener('input', (e) => {
+        document.getElementById(`${id}-val`).innerText = e.target.value;
+        onChange(parseFloat(e.target.value));
+    });
+
+    div.appendChild(input);
+    return div;
+}
+
+function createColorPicker(label, colors, onSelect) {
+    const div = document.createElement('div');
+    div.className = 'control-group';
+    div.innerHTML = `<h3>${label}</h3>`;
+
+    const grid = document.createElement('div');
+    grid.className = 'color-grid';
+
+    colors.forEach(col => {
+        const btn = document.createElement('div');
+        btn.className = 'color-btn';
+        btn.style.backgroundColor = col;
         btn.addEventListener('click', () => {
-            elements.tabBtns.forEach(b => b.classList.remove('active'));
+            document.querySelectorAll(`.color-btn[data-group="${label}"]`).forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            renderOptions(btn.dataset.category);
+            onSelect(col);
         });
+        btn.dataset.group = label;
+        grid.appendChild(btn);
     });
 
-    elements.randomBtn.addEventListener('click', () => {
-        state.face = CharacterData.parts.face[Math.floor(Math.random() * CharacterData.parts.face.length)].id;
-        state.eyes = CharacterData.parts.eyes[Math.floor(Math.random() * CharacterData.parts.eyes.length)].id;
-        state.mouth = CharacterData.parts.mouth[Math.floor(Math.random() * CharacterData.parts.mouth.length)].id;
-        state.hair = CharacterData.parts.hair[Math.floor(Math.random() * CharacterData.parts.hair.length)].id;
+    div.appendChild(grid);
+    return div;
+}
 
-        state.colors.skin = CharacterData.colors.skin[Math.floor(Math.random() * CharacterData.colors.skin.length)];
-        state.colors.hair = CharacterData.colors.hair[Math.floor(Math.random() * CharacterData.colors.hair.length)];
+function createSelector(label, options, onSelect) {
+    const div = document.createElement('div');
+    div.className = 'control-group';
+    div.innerHTML = `<h3>${label}</h3>`;
 
-        updateUI();
-        renderCharacter();
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.gap = '10px';
+
+    options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'cyber-btn secondary';
+        btn.style.flex = '1';
+        btn.style.padding = '0.5rem';
+        btn.innerText = opt.name;
+        btn.addEventListener('click', () => {
+            onSelect(opt.id);
+        });
+        container.appendChild(btn);
     });
 
-    elements.exportBtn.addEventListener('click', () => {
-        const svg = document.getElementById('character-svg');
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+    div.appendChild(container);
+    return div;
+}
 
-        img.onload = () => {
-            canvas.width = 800;
-            canvas.height = 1000;
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, 800, 1000);
-            const pngUrl = canvas.toDataURL('image/png');
-            const downloadLink = document.createElement('a');
-            downloadLink.href = pngUrl;
-            downloadLink.download = 'mypoly-character.png';
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-            URL.revokeObjectURL(url);
-        };
-        img.src = url;
+// Render UI Panels
+function renderCategory(category) {
+    panel.innerHTML = '';
+
+    if (category === 'body') {
+        panel.appendChild(createSlider('height', 'Height', 0.8, 1.2, 0.01, uiState.height, (v) => {
+            uiState.height = v;
+            character.updateScale(uiState);
+        }));
+        panel.appendChild(createSlider('build', 'Build (Width)', 0.8, 1.5, 0.01, uiState.build, (v) => {
+            uiState.build = v;
+            character.updateScale(uiState);
+        }));
+    }
+    else if (category === 'head') {
+        panel.appendChild(createSlider('headSize', 'Head Size', 0.8, 1.5, 0.01, uiState.headSize, (v) => {
+            uiState.headSize = v;
+            character.updateScale(uiState);
+        }));
+
+        panel.appendChild(createSelector('Head Shape', [
+            { id: 'shape1', name: 'Round' },
+            { id: 'shape2', name: 'Box' },
+            { id: 'shape3', name: 'Sharp' }
+        ], (id) => character.setHeadShape(id)));
+
+        panel.appendChild(createSelector('Hairstyle', [
+            { id: 'style1', name: 'Messy' },
+            { id: 'style2', name: 'Flat' },
+            { id: 'style3', name: 'Mohawk' }
+        ], (id) => character.createHair(id)));
+    }
+    else if (category === 'colors') {
+        const skinColors = ['#ffdbac', '#f1c27d', '#e0ac69', '#8d5524', '#3e2723'];
+        const clothesColors = ['#f8fafc', '#1e293b', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+
+        panel.appendChild(createColorPicker('Skin Tone', skinColors, (c) => character.setColor('skin', c)));
+        panel.appendChild(createColorPicker('Shirt Color', clothesColors, (c) => character.setColor('shirt', c)));
+        panel.appendChild(createColorPicker('Pants Color', clothesColors, (c) => character.setColor('pants', c)));
+        panel.appendChild(createColorPicker('Shoes Color', clothesColors, (c) => character.setColor('shoes', c)));
+    }
+}
+
+// Tab Switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderCategory(btn.dataset.category);
     });
+});
 
-    // Initial render
-    renderCharacter();
-    renderOptions('face');
+// Initial Render
+renderCategory('body');
+
+// Randomize
+document.getElementById('random-btn').addEventListener('click', () => {
+    // Logic to randomise all sliders and colors
+    // For demo purposes (simple version)
+    const r = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const randColor = () => '#' + new THREE.Color(Math.random(), Math.random(), Math.random()).getHexString();
+
+    character.setColor('shirt', randColor());
+    character.setColor('pants', randColor());
+    character.setColor('skin', r(['#ffdbac', '#8d5524']));
+    character.setHeadShape(r(['shape1', 'shape2', 'shape3']));
 });
